@@ -3,19 +3,46 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Collections;
 import java.util.Scanner;
 
+/**
+ * MIT License
+ *
+ * Copyright(c) 2022-25 João Caram <caram@pucminas.br>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 public class AppOficina {
 
     static final int MAX_PEDIDOS = 100;
     static Produto[] produtos;
-    static Produto[] produtosPorId;
-    static Produto[] produtosPorDescricao;
     static int quantProdutos = 0;
     static String nomeArquivoDados = "produtos.txt";
     static IOrdenador<Produto> ordenador;
+    static final Comparator<Produto> COMPARADOR_CODIGO = new ComparadorPorCodigo();
+    static final Comparator<Produto> COMPARADOR_DESCRICAO = new ComparadorPorDescricao();
+    static Produto[] produtosOrdenadosPorCodigo;
+    static Produto[] produtosOrdenadosPorDescricao;
 
     // #region utilidades
     static Scanner teclado;
@@ -75,18 +102,18 @@ public class AppOficina {
 
     static int exibirMenuComparadores() {
         cabecalho();
-        System.out.println("1 - Padrão");
-        System.out.println("2 - Por código");
+        System.out.println("1 - Por código");
+        System.out.println("2 - Por descrição");
         
         return lerNumero("Digite sua opção", Integer.class);
     }
 
-    static int exibirMenuPesquisa() {
+    static int exibirMenuBusca() {
         cabecalho();
-        System.out.println("Pesquisar produto por:");
-        System.out.println("1 - Identificador (ID)");
+        System.out.println("Procurar produto por:");
+        System.out.println("1 - Código identificador");
         System.out.println("2 - Descrição");
-        
+
         return lerNumero("Digite sua opção", Integer.class);
     }
 
@@ -94,6 +121,7 @@ public class AppOficina {
     static Produto[] carregarProdutos(String nomeArquivo){
         Scanner dados;
         Produto[] dadosCarregados;
+        quantProdutos = 0;
         try{
             dados = new Scanner(new File(nomeArquivo));
             int tamanho = Integer.parseInt(dados.nextLine());
@@ -112,48 +140,49 @@ public class AppOficina {
         return dadosCarregados;
     }
 
-    static void criarCopiasProdutos() {
-        if (produtos == null) return;
-        
-        // Criar cópias dos dados originais
-        produtosPorId = Arrays.copyOf(produtos, quantProdutos);
-        produtosPorDescricao = Arrays.copyOf(produtos, quantProdutos);
-        
-        // Ordenar por ID (usando ComparadorPorCodigo)
-        Arrays.sort(produtosPorId, new ComparadorPorCodigo());
-        
-        // Ordenar por descrição (ordem padrão de Produto)
-        Arrays.sort(produtosPorDescricao);
+
+    static void criarCopiasOrdenadas() {
+        if (produtos == null || quantProdutos == 0) {
+            produtosOrdenadosPorCodigo = new Produto[0];
+            produtosOrdenadosPorDescricao = new Produto[0];
+            return;
+        }
+        IOrdenador<Produto> ordenadorBase = new Mergesort<>();
+        produtosOrdenadosPorCodigo = ordenadorBase.ordenar(produtos, COMPARADOR_CODIGO);
+        produtosOrdenadosPorDescricao = ordenadorBase.ordenar(produtos, COMPARADOR_DESCRICAO);
     }
 
 
     static Produto localizarProduto() {
-        cabecalho();
-        System.out.println("Localizando um produto");
-        int tipoBusca = exibirMenuPesquisa();
-        
-        if (tipoBusca == 1) {
-            return buscarPorId();
-        } else if (tipoBusca == 2) {
-            return buscarPorDescricao();
+        int criterio = exibirMenuBusca();
+        if (criterio == 1) {
+            Integer numero = lerNumero("Digite o identificador do produto", Integer.class);
+            if (numero == null) {
+                return null;
+            }
+            return localizarProdutoPorCodigo(numero);
+        }
+        if (criterio == 2) {
+            System.out.print("Digite a descrição do produto: ");
+            String descricao = teclado.nextLine();
+            return localizarProdutoPorDescricao(descricao);
         }
         return null;
     }
 
-    static Produto buscarPorId() {
-        Integer numero = lerNumero("Digite o identificador do produto", Integer.class);
-        if (numero == null) return null;
-        
+    static Produto localizarProdutoPorCodigo(int codigo) {
         int inicio = 0;
         int fim = quantProdutos - 1;
-        
+
         while (inicio <= fim) {
             int meio = (inicio + fim) / 2;
-            int idMeio = produtosPorId[meio].hashCode();
-            
-            if (idMeio == numero) {
-                return produtosPorId[meio];
-            } else if (idMeio < numero) {
+            Produto atual = produtosOrdenadosPorCodigo[meio];
+            int comparacao = Integer.compare(atual.getIdProduto(), codigo);
+
+            if (comparacao == 0) {
+                return atual;
+            }
+            if (comparacao < 0) {
                 inicio = meio + 1;
             } else {
                 fim = meio - 1;
@@ -162,21 +191,20 @@ public class AppOficina {
         return null;
     }
 
-    static Produto buscarPorDescricao() {
-        System.out.print("Digite a descrição do produto: ");
-        String descricao = teclado.nextLine();
-        
-        // Usar busca binária em produtosPorDescricao
+    static Produto localizarProdutoPorDescricao(String descricao) {
+        String criterio = descricao == null ? "" : descricao.trim();
         int inicio = 0;
         int fim = quantProdutos - 1;
-        
+
         while (inicio <= fim) {
             int meio = (inicio + fim) / 2;
-            int comparacao = produtosPorDescricao[meio].descricao.compareTo(descricao);
-            
+            Produto atual = produtosOrdenadosPorDescricao[meio];
+            int comparacao = atual.getDescricao().compareToIgnoreCase(criterio);
+
             if (comparacao == 0) {
-                return produtosPorDescricao[meio];
-            } else if (comparacao < 0) {
+                return atual;
+            }
+            if (comparacao < 0) {
                 inicio = meio + 1;
             } else {
                 fim = meio - 1;
@@ -210,22 +238,60 @@ public class AppOficina {
 
     static void ordenarProdutos(){
         cabecalho();
-        
-        int opcao = exibirMenuOrdenadores();
-        //Complete com a sua lógica
-        ordenador = null;
+
+        int opcaoOrdenador = exibirMenuOrdenadores();
+        ordenador = selecionarOrdenador(opcaoOrdenador);
+        if (ordenador == null) {
+            return;
+        }
+
+        int opcaoComparador = exibirMenuComparadores();
+        Comparator<Produto> comparador = selecionarComparador(opcaoComparador);
+        if (comparador == null) {
+            return;
+        }
+
+        Produto[] copiaOrdenada = ordenador.ordenar(produtos, comparador);
+        if (verificarSubstituicao()) {
+            produtos = Arrays.copyOf(copiaOrdenada, copiaOrdenada.length);
+        }
+    }
+
+    static IOrdenador<Produto> selecionarOrdenador(int opcao) {
+        switch (opcao) {
+            case 1:
+                return new Bubblesort<>();
+            case 2:
+                return new InsertSort<>();
+            case 3:
+                return new SelectionSort<>();
+            case 4:
+                return new Mergesort<>();
+            default:
+                return null;
+        }
+    }
+
+    static Comparator<Produto> selecionarComparador(int opcao) {
+        switch (opcao) {
+            case 1:
+                return COMPARADOR_CODIGO;
+            case 2:
+                return COMPARADOR_DESCRICAO;
+            default:
+                return null;
+        }
     }
 
     static void embaralharProdutos(){
         Collections.shuffle(Arrays.asList(produtos));
     }
 
-    static void verificarSubstituicao(Produto[] dadosOriginais, Produto[] copiaDados){
+    static boolean verificarSubstituicao(){
         cabecalho();
         System.out.print("Deseja sobrescrever os dados originais pelos ordenados (S/N)?");
         String resposta = teclado.nextLine().toUpperCase();
-        if(resposta.equals("S"))
-            dadosOriginais = Arrays.copyOf(copiaDados, copiaDados.length);
+        return resposta.equals("S");
     }
 
     static void listarProdutos(){
@@ -239,7 +305,12 @@ public class AppOficina {
         teclado = new Scanner(System.in);
         
         produtos = carregarProdutos(nomeArquivoDados);
-        criarCopiasProdutos();
+        if (produtos == null) {
+            System.out.println("Não foi possível iniciar sem os dados de produtos.");
+            teclado.close();
+            return;
+        }
+        criarCopiasOrdenadas();
         embaralharProdutos();
 
         int opcao = -1;

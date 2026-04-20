@@ -31,7 +31,7 @@ public abstract class Produto implements Comparable<Produto> {
     private static int ultimoID = 10_000;
 
     protected int idProduto;
-    public String descricao;
+    protected String descricao;
     protected double precoCusto;
     protected double margemLucro;
         
@@ -94,6 +94,14 @@ public abstract class Produto implements Comparable<Produto> {
      */
     public int hashCode(){
         return idProduto;
+    }
+
+    public int getIdProduto() {
+        return idProduto;
+    }
+
+    public String getDescricao() {
+        return descricao;
     }
 
     /**
